@@ -1,228 +1,333 @@
 import streamlit as st
 import random
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # Page configuration
 st.set_page_config(
-    page_title="🔋 Battery Cell Monitor",
+    page_title="🔋 Battery Cell Manager",
     page_icon="🔋",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for simple styling
+# Custom CSS for better styling
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
-        font-weight: 700;
+        font-size: 3rem;
+        font-weight: bold;
         text-align: center;
-        color: #1f77b4;
+        background: linear-gradient(90deg, #FF6B6B, #4ECDC4, #45B7D1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
         margin-bottom: 2rem;
     }
     
     .cell-card {
-        background: #f0f2f6;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #1f77b4;
-        margin: 0.5rem 0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        border-radius: 15px;
+        color: white;
+        margin: 1rem 0;
+        box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+        backdrop-filter: blur(4px);
+        border: 1px solid rgba(255, 255, 255, 0.18);
     }
     
-    .status-good { color: #28a745; font-weight: bold; }
-    .status-warning { color: #ffc107; font-weight: bold; }
-    .status-danger { color: #dc3545; font-weight: bold; }
+    .metric-card {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 1rem;
+        border-radius: 10px;
+        margin: 0.5rem 0;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .stSelectbox > div > div {
+        background-color: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+    }
+    
+    .sidebar-content {
+        background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        border-radius: 15px;
+        color: white;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # Initialize session state
 if 'cells_data' not in st.session_state:
     st.session_state.cells_data = {}
-if 'list_of_cell' not in st.session_state:
-    st.session_state.list_of_cell = []
-if 'cell_no' not in st.session_state:
-    st.session_state.cell_no = 0
-
-def get_cell_status(voltage, min_voltage, max_voltage, temp):
-    """Determine cell status based on parameters"""
-    voltage_ok = min_voltage <= voltage <= max_voltage
-    temp_ok = 25 <= temp <= 40
-    
-    if voltage_ok and temp_ok:
-        return "🟢 Good", "status-good"
-    elif not voltage_ok:
-        return "🔴 Critical", "status-danger"
-    else:
-        return "🟡 Warning", "status-warning"
+if 'cell_types' not in st.session_state:
+    st.session_state.cell_types = []
 
 # Main header
-st.markdown('<h1 class="main-header">🔋 Battery Cell Monitor</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-header">🔋 Battery Cell Management System</h1>', unsafe_allow_html=True)
 
-# Main content
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    st.header("Cell Setup")
+# Sidebar for cell configuration
+with st.sidebar:
+    st.markdown("## 🔧 Cell Configuration")
     
-    # Step 1: Number of cells (from your original code)
-    cell_no = st.number_input("Enter the number of cells:", min_value=1, max_value=20, value=1, step=1)
+    # Number of cells selector
+    num_cells = st.slider("Number of Cells", min_value=1, max_value=12, value=8, key="num_cells")
     
-    if st.button("Initialize Cells"):
-        st.session_state.cell_no = cell_no
-        st.session_state.list_of_cell = []
-        st.session_state.cells_data = {}
+    st.markdown("### Select Cell Types")
     
-    # Step 2: Cell type selection (from your original code)
-    if st.session_state.cell_no > 0:
-        st.subheader("Enter Cell Types")
+    # Dynamic cell type selection
+    cell_types = []
+    for i in range(num_cells):
+        cell_type = st.selectbox(
+            f"Cell #{i+1} Type",
+            options=["LFP", "NMC"],
+            key=f"cell_type_{i}",
+            help="LFP: Lithium Iron Phosphate, NMC: Nickel Manganese Cobalt"
+        )
+        cell_types.append(cell_type.lower())
+    
+    # Button to generate cells
+    if st.button("🚀 Generate Cells", type="primary", use_container_width=True):
+        st.session_state.cell_types = cell_types
+        cells_data = {}
         
-        for i in range(st.session_state.cell_no):
-            cell_type = st.selectbox(
-                f"Cell {i+1} type:", 
-                ["lfp", "nmc"], 
-                key=f"cell_type_{i}"
-            )
+        for idx, cell_type in enumerate(cell_types, start=1):
+            cell_key = f"cell_{idx}_{cell_type}"
+            voltage = 3.2 if cell_type == "lfp" else 3.6
+            min_voltage = 2.8 if cell_type == "lfp" else 3.2
+            max_voltage = 3.6 if cell_type == "lfp" else 4.0
+            current = 0.0
+            temp = round(random.uniform(25, 40), 1)
+            capacity = round(voltage * current, 2)
             
-            if len(st.session_state.list_of_cell) <= i:
-                st.session_state.list_of_cell.append(cell_type)
-            else:
-                st.session_state.list_of_cell[i] = cell_type
+            cells_data[cell_key] = {
+                "voltage": voltage,
+                "current": current,
+                "temp": temp,
+                "capacity": capacity,
+                "min_voltage": min_voltage,
+                "max_voltage": max_voltage,
+                "type": cell_type.upper()
+            }
         
-        if st.button("Create Cell Data"):
-            # Your original cell data creation logic
-            st.session_state.cells_data = {}
-            
-            for idx, cell_type in enumerate(st.session_state.list_of_cell, start=1):
-                cell_key = f"cell_{idx}_{cell_type}"
-                
-                # Your original voltage logic
-                voltage = 3.2 if cell_type == "lfp" else 3.6
-                min_voltage = 2.8 if cell_type == "lfp" else 3.2
-                max_voltage = 3.6 if cell_type == "lfp" else 4.0
-                current = 0.0
-                temp = round(random.uniform(25, 40), 1)  # Your original temp logic
-                capacity = round(voltage * current, 2)  # Your original capacity logic
+        st.session_state.cells_data = cells_data
+        st.success(f"✅ Generated {num_cells} cells successfully!")
 
-                st.session_state.cells_data[cell_key] = {
-                    "voltage": voltage,
-                    "current": current,
-                    "temp": temp,
-                    "capacity": capacity,
-                    "min_voltage": min_voltage,
-                    "max_voltage": max_voltage
-                }
+# Main content area
+if st.session_state.cells_data:
+    # Tabs for different views
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Cell Overview", "⚡ Current Input", "📈 Analytics", "📋 Data Table"])
     
-    # Step 3: Current input (from your original code)
-    if st.session_state.cells_data:
-        st.subheader("Enter Current Values")
+    with tab1:
+        st.markdown("## 📊 Cell Overview")
         
-        for key in st.session_state.cells_data:
-            try:
-                current = st.number_input(
-                    f"Current for {key} (A):", 
-                    value=st.session_state.cells_data[key]["current"],
-                    step=0.1,
-                    key=f"current_input_{key}"
-                )
+        # Display cells in a grid layout
+        cols = st.columns(3)
+        for idx, (cell_key, cell_data) in enumerate(st.session_state.cells_data.items()):
+            with cols[idx % 3]:
+                # Determine color based on cell type
+                color = "🟢" if cell_data["type"] == "LFP" else "🔵"
                 
-                # Your original capacity update logic
-                voltage = st.session_state.cells_data[key]["voltage"]
-                st.session_state.cells_data[key]["current"] = current
-                st.session_state.cells_data[key]["capacity"] = round(voltage * current, 2)
-                
-            except ValueError:
-                st.error("Invalid input. Setting current to 0.")
-                st.session_state.cells_data[key]["current"] = 0.0
-
-with col2:
-    if st.session_state.cells_data:
-        st.header("Cell Data Display")
+                st.markdown(f"""
+                <div class="cell-card">
+                    <h3>{color} {cell_key.replace('_', ' ').title()}</h3>
+                    <div class="metric-card">
+                        <strong>🔋 Voltage:</strong> {cell_data['voltage']} V<br>
+                        <strong>⚡ Current:</strong> {cell_data['current']} A<br>
+                        <strong>🌡️ Temperature:</strong> {cell_data['temp']} °C<br>
+                        <strong>⚡ Capacity:</strong> {cell_data['capacity']} Wh<br>
+                        <strong>📊 Range:</strong> {cell_data['min_voltage']}-{cell_data['max_voltage']} V
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    with tab2:
+        st.markdown("## ⚡ Current Input Configuration")
         
-        # Overview metrics
-        total_cells = len(st.session_state.cells_data)
-        avg_voltage = sum(cell["voltage"] for cell in st.session_state.cells_data.values()) / total_cells
-        avg_temp = sum(cell["temp"] for cell in st.session_state.cells_data.values()) / total_cells
-        total_capacity = sum(cell["capacity"] for cell in st.session_state.cells_data.values())
+        col1, col2 = st.columns([2, 1])
         
-        col_a, col_b, col_c, col_d = st.columns(4)
-        with col_a:
-            st.metric("Total Cells", total_cells)
-        with col_b:
-            st.metric("Avg Voltage", f"{avg_voltage:.2f}V")
-        with col_c:
-            st.metric("Avg Temp", f"{avg_temp:.1f}°C")
-        with col_d:
-            st.metric("Total Capacity", f"{total_capacity:.2f}Wh")
-        
-        st.divider()
-        
-        # Individual cell display (similar to your original print output)
-        st.subheader("Updated Cell Data")
-        
-        for key, values in st.session_state.cells_data.items():
-            status, status_class = get_cell_status(
-                values["voltage"], 
-                values["min_voltage"], 
-                values["max_voltage"],
-                values["temp"]
-            )
+        with col1:
+            st.markdown("### Adjust Current Values")
             
-            with st.container():
-                st.markdown(f'<div class="cell-card">', unsafe_allow_html=True)
+            # Create current input fields
+            updated_data = st.session_state.cells_data.copy()
+            
+            for cell_key in st.session_state.cells_data.keys():
+                col_a, col_b = st.columns([3, 1])
+                with col_a:
+                    current = st.number_input(
+                        f"Current for {cell_key.replace('_', ' ').title()}",
+                        min_value=0.0,
+                        max_value=10.0,
+                        value=float(st.session_state.cells_data[cell_key]["current"]),
+                        step=0.1,
+                        key=f"current_{cell_key}",
+                        help="Enter current in Amperes"
+                    )
+                with col_b:
+                    st.markdown(f"**Type:** {st.session_state.cells_data[cell_key]['type']}")
                 
-                col_left, col_right = st.columns(2)
-                
-                with col_left:
-                    st.write(f"**{key}:**")
-                    st.write(f"• Voltage: {values['voltage']}V")
-                    st.write(f"• Current: {values['current']}A")
-                    st.write(f"• Temperature: {values['temp']}°C")
-                
-                with col_right:
-                    st.write(f"**Status:** {status}")
-                    st.write(f"• Capacity: {values['capacity']}Wh")
-                    st.write(f"• Range: {values['min_voltage']}V - {values['max_voltage']}V")
-                
-                st.markdown('</div>', unsafe_allow_html=True)
+                # Update the data
+                voltage = updated_data[cell_key]["voltage"]
+                updated_data[cell_key]["current"] = current
+                updated_data[cell_key]["capacity"] = round(voltage * current, 2)
+            
+            if st.button("🔄 Update All Currents", type="primary"):
+                st.session_state.cells_data = updated_data
+                st.success("✅ All currents updated successfully!")
+                st.rerun()
         
-        st.divider()
+        with col2:
+            st.markdown("### 📊 Quick Stats")
+            total_capacity = sum(cell["capacity"] for cell in st.session_state.cells_data.values())
+            avg_temp = sum(cell["temp"] for cell in st.session_state.cells_data.values()) / len(st.session_state.cells_data)
+            total_current = sum(cell["current"] for cell in st.session_state.cells_data.values())
+            
+            st.metric("Total Capacity", f"{total_capacity:.2f} Wh")
+            st.metric("Average Temperature", f"{avg_temp:.1f} °C")
+            st.metric("Total Current", f"{total_current:.1f} A")
+            
+            # Cell type distribution
+            lfp_count = sum(1 for cell in st.session_state.cells_data.values() if cell["type"] == "LFP")
+            nmc_count = len(st.session_state.cells_data) - lfp_count
+            
+            st.markdown("### Cell Distribution")
+            st.markdown(f"🟢 LFP Cells: {lfp_count}")
+            st.markdown(f"🔵 NMC Cells: {nmc_count}")
+    
+    with tab3:
+        st.markdown("## 📈 Analytics Dashboard")
+    
+    # Prepare data for visualization
+    df = pd.DataFrame(st.session_state.cells_data).T
+    df['cell_name'] = df.index
+
+    # 🔑 Ensure numeric columns are proper floats
+    df['capacity'] = pd.to_numeric(df['capacity'], errors='coerce')
+    df['current'] = pd.to_numeric(df['current'], errors='coerce')
+    df['voltage'] = pd.to_numeric(df['voltage'], errors='coerce')
+    df['temp'] = pd.to_numeric(df['temp'], errors='coerce')
+
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Voltage vs Current scatter plot
+        fig1 = px.scatter(
+            df, 
+            x='voltage', 
+            y='current',
+            color='type',
+            size='capacity',   # ✅ now guaranteed numeric
+            hover_data=['temp', 'capacity'],
+            title="🔋 Voltage vs Current Analysis",
+            color_discrete_map={'LFP': '#2E8B57', 'NMC': '#4169E1'}
+        )
+        fig1.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='white')
+        )
+        st.plotly_chart(fig1, use_container_width=True)
         
-        # Data table (replicating your original dictionary output)
-        st.subheader("Raw Data (Dictionary Format)")
+        # Temperature distribution
+        fig3 = px.histogram(
+            df,
+            x='temp',
+            color='type',
+            title="🌡️ Temperature Distribution",
+            nbins=10,
+            color_discrete_map={'LFP': '#2E8B57', 'NMC': '#4169E1'}
+        )
+        fig3.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='white')
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+    
+    with col2:
+        # Capacity comparison bar chart
+        fig2 = px.bar(
+            df,
+            x='cell_name',
+            y='capacity',
+            color='type',
+            title="⚡ Cell Capacity Comparison",
+            color_discrete_map={'LFP': '#2E8B57', 'NMC': '#4169E1'}
+        )
+        fig2.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='white'),
+            xaxis_tickangle=-45
+        )
+        st.plotly_chart(fig2, use_container_width=True)
         
-        # Display in the format similar to your original print statement
-        for key, values in st.session_state.cells_data.items():
-            st.code(f"{key}: {values}")
+        # Cell type pie chart
+        type_counts = df['type'].value_counts()
+        fig4 = px.pie(
+            values=type_counts.values,
+            names=type_counts.index,
+            title="📊 Cell Type Distribution",
+            color_discrete_map={'LFP': '#2E8B57', 'NMC': '#4169E1'}
+        )
+        fig4.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='white')
+        )
+        st.plotly_chart(fig4, use_container_width=True)
+
+    
+    with tab4:
+        st.markdown("## 📋 Detailed Data Table")
         
-        # DataFrame version
-        st.subheader("Table View")
-        df_data = []
-        for key, cell_data in st.session_state.cells_data.items():
-            df_data.append({
-                "Cell ID": key,
-                "Voltage (V)": cell_data["voltage"],
-                "Current (A)": cell_data["current"],
-                "Temperature (°C)": cell_data["temp"],
-                "Capacity (Wh)": cell_data["capacity"],
-                "Min Voltage (V)": cell_data["min_voltage"],
-                "Max Voltage (V)": cell_data["max_voltage"]
-            })
+        # Display data as a formatted table
+        display_df = pd.DataFrame(st.session_state.cells_data).T
+        display_df.index.name = "Cell ID"
         
-        df = pd.DataFrame(df_data)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        # Format the dataframe for better display
+        display_df_formatted = display_df.round(2)
+        display_df_formatted.columns = [col.replace('_', ' ').title() for col in display_df_formatted.columns]
+        
+        st.dataframe(
+            display_df_formatted,
+            use_container_width=True,
+            height=400
+        )
         
         # Download button
-        csv = df.to_csv(index=False)
+        csv = display_df_formatted.to_csv()
         st.download_button(
-            label="📥 Download CSV",
+            label="📥 Download Data as CSV",
             data=csv,
             file_name="battery_cell_data.csv",
-            mime="text/csv"
+            mime="text/csv",
+            use_container_width=True
         )
-
-    else:
-        st.info("👈 Please set up your cells using the controls on the left!")
+else:
+    # Welcome message when no cells are configured
+    st.markdown("""
+    <div style="text-align: center; padding: 4rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; color: white; margin: 2rem 0;">
+        <h2>🚀 Welcome to Battery Cell Manager!</h2>
+        <p style="font-size: 1.2rem; margin: 2rem 0;">Configure your battery cells using the sidebar to get started.</p>
+        <p>✨ Features:</p>
+        <p>🔋 Support for LFP and NMC cell types<br>
+        ⚡ Real-time current and capacity calculations<br>
+        📊 Interactive analytics and visualizations<br>
+        📱 Responsive and beautiful UI</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Footer
 st.markdown("---")
-st.markdown("Built with Streamlit | Based on your original battery cell monitoring code")
+st.markdown(
+    "<div style='text-align: center; color: #888; padding: 1rem;'>"
+    "🔋 Battery Cell Management System | Built with ❤️ using Streamlit"
+    "</div>", 
+    unsafe_allow_html=True
+)
